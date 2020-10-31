@@ -21,8 +21,32 @@ container_scanning:
   services:
     - docker:stable-dind
   script:
-    ## We start a local registry to push the image to
     - docker run -d -p 5000:5000 --restart always --name registry registry:2
     - docker build -t "$IMAGE_NAME" .
     - docker push "$IMAGE_NAME"
-    - echo <Put your clair scanning code here>
+    #Run the docker container for clair db
+    - docker run -d --name db arminc/clair-db:2020-07-17
+    #Run the docker container for clair-local-scan
+    - docker run -p 6060:6060 --link db:postgres -d --name clair --restart on-failure arminc/clair-local-scan:v2.0.1
+    #Install the certificatess
+    - apk add -U wget ca-certificates
+    #Pull our docker image that we have build and pushed in the previous step
+    - docker pull "$IMAGE_NAME"
+    #Download the clair binary
+    - wget https://github.com/arminc/clair-scanner/releases/download/v8/clair-scanner_linux_amd64
+    #Rename the clair binary
+    - mv clair-scanner_linux_amd64 clair-scanner
+    #Setting the permissions of clair scanner
+    - chmod +x clair-scanner
+    #create a new whitelist file to whitelist the rules
+    - touch clair-whitelist.yml
+    #Wait until the setup is ready
+    - while( ! wget -q -O /dev/null http://docker:6060/v1/namespaces ) ; do sleep 1 ; done
+    #Set the retries to 0
+    - retries=0
+    - echo "Waiting for clair daemon to start"
+    #Check if server is up. Total tries are 10.
+    - while( ! wget -T 10 -q -O /dev/null http://docker:6060/v1/namespaces ) ; do sleep 1 ; echo -n "." ; if [ $retries -eq 10 ] ; then echo " Timeout, aborting." ; exit 1 ; fi ; retries=$(($retries+1)) ; done
+    #Run the clair scanner to scan our docker image
+    - ./clair-scanner -t "Defcon1" -c http://docker:6060 --ip $(hostname -i)  "$IMAGE_NAME"
+
