@@ -1,0 +1,28 @@
+variables:
+  IMAGE_NAME: "localhost:5000/vulnerable-image"
+  DOCKER_TLS_CERTDIR: ""
+
+stages:
+  - lint
+  - scan
+
+container_image_lint:
+  stage: lint
+  image: hadolint/hadolint:latest-debian
+  script:
+    - hadolint Dockerfile
+
+container_scanning:
+  stage: scan
+  image: docker:stable
+  variables:
+    DOCKER_DRIVER: overlay2
+  allow_failure: false
+  services:
+    - docker:stable-dind
+  script:
+    ## We start a local registry to push the image to
+    - docker run -d -p 5000:5000 --restart always --name registry registry:2
+    - docker build -t "$IMAGE_NAME" .
+    - docker push "$IMAGE_NAME"
+    - echo <Put your clair scanning code here>
