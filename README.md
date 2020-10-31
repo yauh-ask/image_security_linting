@@ -12,4 +12,3 @@ Normally, vulnerability scanner [clair](https://github.com/arminc/clair-scanner)
 
 This exposures are solved by updating the version of nginx, `FROM quay.io/jitesoft/nginx:1.17.10`
 
-`
